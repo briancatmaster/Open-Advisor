@@ -117,6 +117,8 @@ export interface PlannedCourse {
   name: string
   credits: number
   atlasUrl?: string
+  prereqs?: string[]      // flat OR list (legacy/fallback)
+  prereqGroups?: string[][] // AND-of-OR: [[EECS 203, MATH 465], [EECS 280]] — all groups must be satisfied
 }
 
 // ─── Course Ranking ───────────────────────────────────────────────────────────

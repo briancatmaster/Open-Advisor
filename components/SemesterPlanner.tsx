@@ -1,11 +1,66 @@
 'use client'
 
-import { useState } from 'react'
-import { useDraggable, useDroppable } from '@dnd-kit/core'
+import { useRef, useState } from 'react'
+import { useDraggable, useDroppable, useDndMonitor } from '@dnd-kit/core'
 import { Trash2, AlertTriangle, ChevronLeft, ChevronRight, Calendar, GripVertical } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { useShallow } from 'zustand/react/shallow'
-import type { PlannedCourse } from '@/lib/types'
+import type { PlannedCourse, PlannedSemester } from '@/lib/types'
+
+// Normalize a course code for comparison: uppercase, insert space between dept and number.
+// e.g. "MATH116" → "MATH 116", "math 116" → "MATH 116"
+function normCode(code: string): string {
+  return code.toUpperCase().trim().replace(/^([A-Z]+)(\d)/, '$1 $2')
+}
+
+const COURSE_CODE_RE = /^[A-Z]{2,8}\s\d{3}[A-Z]?$/
+const CONJUNCTIONS = new Set(['OR', 'AND', 'OF', 'THE', 'IN', 'AT', 'TO', 'A', 'AN', 'NO', 'OP'])
+
+function isValidCourseCode(p: string): boolean {
+  if (!COURSE_CODE_RE.test(p)) return false
+  const dept = p.split(' ')[0]
+  return !CONJUNCTIONS.has(dept)
+}
+
+// Returns map of courseCode → unsatisfied AND groups (each group is an OR list).
+// All returned groups need at least one prereq satisfied; anything returned is missing.
+function computePrereqViolations(
+  semesters: PlannedSemester[],
+  completedCodes: Set<string>
+): Map<string, string[][]> {
+  const violations = new Map<string, string[][]>()
+
+  for (let i = 0; i < semesters.length; i++) {
+    const available = new Set<string>(Array.from(completedCodes).map(normCode))
+    for (let j = 0; j < i; j++) {
+      semesters[j].courses.forEach((c) => available.add(normCode(c.code)))
+    }
+
+    for (const course of semesters[i].courses) {
+      const courseKey = normCode(course.code)
+
+      // Prefer prereqGroups (AND-of-OR); fall back to flat prereqs as single OR group
+      const groups: string[][] = course.prereqGroups && course.prereqGroups.length > 0
+        ? course.prereqGroups
+        : course.prereqs && course.prereqs.length > 0
+          ? [course.prereqs]
+          : []
+
+      if (groups.length === 0) continue
+
+      const unsatisfied = groups
+        .map((group) => group.map(normCode).filter((p) => isValidCourseCode(p) && p !== courseKey))
+        .filter((group) => group.length > 0)
+        .filter((group) => !group.some((p) => available.has(p)))  // OR logic per group
+
+      if (unsatisfied.length > 0) {
+        // Cap each OR group to 3 options for display
+        violations.set(courseKey, unsatisfied.map((g) => g.slice(0, 3)))
+      }
+    }
+  }
+  return violations
+}
 
 const CREDIT_WARN = 18
 const CREDIT_DANGER = 20
@@ -22,11 +77,13 @@ function DraggablePlannedCourse({
   course,
   onRemove,
   onOpenAtlas,
+  missingPrereqs,
 }: {
   semId: string
   course: PlannedCourse
   onRemove: (code: string) => void
   onOpenAtlas: (course: PlannedCourse) => void
+  missingPrereqs?: string[][]  // unsatisfied AND groups, each is an OR list
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `planned-course::${semId}::${encodeURIComponent(course.code)}`,
@@ -37,35 +94,54 @@ function DraggablePlannedCourse({
     },
   })
 
+  const hasViolation = missingPrereqs && missingPrereqs.length > 0
+
   return (
     <div
       ref={setNodeRef}
-      className={`flex items-center justify-between gap-1 bg-umblue-50 border rounded-lg px-2.5 py-1.5 group transition-colors ${
-        isDragging ? 'opacity-40 border-maize' : 'border-umblue-100 hover:border-red-200'
+      className={`flex flex-col gap-0.5 border rounded-lg px-2.5 py-1.5 group transition-all ${
+        isDragging
+          ? 'opacity-40'
+          : hasViolation
+          ? 'border-red-300 bg-gradient-to-r from-red-50 to-orange-50 hover:border-red-400'
+          : 'bg-umblue-50 border-umblue-100 hover:border-red-200'
       }`}
     >
-      <div
-        {...attributes}
-        {...listeners}
-        className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400 shrink-0 touch-none"
-        title="Drag to another semester"
-      >
-        <GripVertical className="w-3 h-3" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <button
-          type="button"
-          onClick={() => onOpenAtlas(course)}
-          className="text-xs font-semibold text-umblue truncate block hover:underline text-left"
-          title="Open in Atlas"
+      <div className="flex items-center justify-between gap-1">
+        <div
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400 shrink-0 touch-none"
+          title="Drag to another semester"
         >
-          {course.code}
+          <GripVertical className="w-3 h-3" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <button
+            type="button"
+            onClick={() => onOpenAtlas(course)}
+            className={`text-xs font-semibold truncate block hover:underline text-left ${hasViolation ? 'text-red-600' : 'text-umblue'}`}
+            title="Open in Atlas"
+          >
+            {course.code}
+          </button>
+          <span className="text-xs text-gray-400 truncate block leading-tight">{course.credits}cr</span>
+        </div>
+        <button onClick={() => onRemove(course.code)} className="text-gray-300 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 shrink-0">
+          <Trash2 className="w-3 h-3" />
         </button>
-        <span className="text-xs text-gray-400 truncate block leading-tight">{course.credits}cr</span>
       </div>
-      <button onClick={() => onRemove(course.code)} className="text-gray-300 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 shrink-0">
-        <Trash2 className="w-3 h-3" />
-      </button>
+      {hasViolation && (
+        <div className="flex items-start gap-1 text-[10px] text-red-500 leading-tight pl-4">
+          <AlertTriangle className="w-2.5 h-2.5 mt-0.5 shrink-0" />
+          <span>
+            {missingPrereqs!.map((group, gi) => {
+              const label = group.length === 1 ? group[0] : `one of ${group.join(', ')}`
+              return gi === 0 ? label : ` and ${label}`
+            }).join('')}{' '}first
+          </span>
+        </div>
+      )}
     </div>
   )
 }
@@ -78,6 +154,7 @@ function DroppableSemesterColumn({
   onRemove,
   onOpenAtlas,
   isOver,
+  violations,
 }: {
   semId: string
   label: string
@@ -86,6 +163,7 @@ function DroppableSemesterColumn({
   onRemove: (code: string) => void
   onOpenAtlas: (course: PlannedCourse) => void
   isOver: boolean
+  violations: Map<string, string[][]>
 }) {
   const totalCredits = courses.reduce((s, c) => s + c.credits, 0)
   const overload = totalCredits > CREDIT_WARN
@@ -122,6 +200,7 @@ function DroppableSemesterColumn({
               course={course}
               onRemove={onRemove}
               onOpenAtlas={onOpenAtlas}
+              missingPrereqs={violations.get(normCode(course.code))}
             />
           ))
         )}
@@ -142,14 +221,64 @@ function DroppableWrapper({ semId, children }: { semId: string; children: (isOve
 }
 
 export default function SemesterPlanner() {
-  const { semesters, removeCourseFromSemester } = useStore(
+  const { semesters, removeCourseFromSemester, auditResult } = useStore(
     useShallow((s) => ({
       semesters: s.semesters,
       removeCourseFromSemester: s.removeCourseFromSemester,
+      auditResult: s.auditResult,
     }))
   )
 
+  const completedCodesRaw = (auditResult?.completedCourses ?? []).map((c) => normCode(c.code))
+  const completedCodes = new Set<string>(completedCodesRaw)
+  const violations = computePrereqViolations(semesters, completedCodes)
+
   const [page, setPage] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
+  const [scrollZone, setScrollZone] = useState<'prev' | 'next' | null>(null)
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const pageRef = useRef(page)
+  pageRef.current = page
+
+  useDndMonitor({
+    onDragStart: () => setIsDragging(true),
+    onDragEnd: () => { setIsDragging(false); setScrollZone(null); clearScrollTimer() },
+    onDragCancel: () => { setIsDragging(false); setScrollZone(null); clearScrollTimer() },
+    onDragMove: (event) => {
+      const rect = containerRef.current?.getBoundingClientRect()
+      if (!rect) return
+      // Get current pointer position: activator position + cumulative delta
+      const activator = event.activatorEvent as PointerEvent
+      const x = activator.clientX + event.delta.x
+      const edgeWidth = 56  // px zone on each side
+      const inLeft = x < rect.left + edgeWidth
+      const inRight = x > rect.right - edgeWidth
+      const zone = inLeft ? 'prev' : inRight ? 'next' : null
+      setScrollZone(zone)
+    },
+  })
+
+  // Trigger page advance when pointer stays in a zone
+  useState(() => {}) // placeholder — effect below handles it
+  const prevZone = useRef<'prev' | 'next' | null>(null)
+  if (prevZone.current !== scrollZone) {
+    prevZone.current = scrollZone
+    clearScrollTimer()
+    if (scrollZone) {
+      scrollTimerRef.current = setTimeout(() => {
+        setPage((p) => {
+          if (scrollZone === 'next') return Math.min(Math.ceil(semesters.length / 3) - 1, p + 1)
+          return Math.max(0, p - 1)
+        })
+      }, 600)
+    }
+  }
+
+  function clearScrollTimer() {
+    if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current)
+    scrollTimerRef.current = null
+  }
   const [atlasCache, setAtlasCache] = useState<Record<string, string>>({})
   const perPage = 3
   const totalPages = Math.ceil(semesters.length / perPage)
@@ -202,22 +331,42 @@ export default function SemesterPlanner() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden grid grid-cols-3 gap-3 p-3">
-        {visible.map((sem) => (
-          <DroppableWrapper key={sem.id} semId={sem.id}>
-            {(isOver) => (
-              <DroppableSemesterColumn
-                semId={sem.id}
-                label={sem.label}
-                season={sem.season}
-                courses={sem.courses}
-                onRemove={(code) => removeCourseFromSemester(sem.id, code)}
-                onOpenAtlas={openAtlas}
-                isOver={isOver}
-              />
-            )}
-          </DroppableWrapper>
-        ))}
+      <div ref={containerRef} className="flex-1 overflow-hidden relative">
+        {/* Drag-to-scroll edge zones — visual indicators, actual trigger is via onDragMove */}
+        {isDragging && page > 0 && (
+          <div
+            className={`absolute left-0 top-0 bottom-0 w-14 z-20 pointer-events-none flex items-center justify-center transition-opacity ${scrollZone === 'prev' ? 'opacity-100' : 'opacity-40'}`}
+            style={{ background: 'linear-gradient(to right, rgba(0,111,186,0.3), transparent)' }}
+          >
+            <ChevronLeft className="w-6 h-6 text-umblue drop-shadow" />
+          </div>
+        )}
+        {isDragging && page < totalPages - 1 && (
+          <div
+            className={`absolute right-0 top-0 bottom-0 w-14 z-20 pointer-events-none flex items-center justify-center transition-opacity ${scrollZone === 'next' ? 'opacity-100' : 'opacity-40'}`}
+            style={{ background: 'linear-gradient(to left, rgba(0,111,186,0.3), transparent)' }}
+          >
+            <ChevronRight className="w-6 h-6 text-umblue drop-shadow" />
+          </div>
+        )}
+        <div className="h-full grid grid-cols-3 gap-3 p-3">
+          {visible.map((sem) => (
+            <DroppableWrapper key={sem.id} semId={sem.id}>
+              {(isOver) => (
+                <DroppableSemesterColumn
+                  semId={sem.id}
+                  label={sem.label}
+                  season={sem.season}
+                  courses={sem.courses}
+                  onRemove={(code) => removeCourseFromSemester(sem.id, code)}
+                  onOpenAtlas={openAtlas}
+                  isOver={isOver}
+                  violations={violations}
+                />
+              )}
+            </DroppableWrapper>
+          ))}
+        </div>
       </div>
     </div>
   )

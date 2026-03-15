@@ -91,13 +91,18 @@ export const useStore = create<AppState>()(
         set({ semesters: generateSemesters(startSeason, startYear, 8) }),
 
       addCourseToSemester: (semesterId, course) =>
-        set((state) => ({
-          semesters: state.semesters.map((s) =>
-            s.id === semesterId && !s.courses.find((c) => c.code === course.code)
-              ? { ...s, courses: [...s.courses, course] }
-              : s
-          ),
-        })),
+        set((state) => {
+          // Prevent duplicates across ALL semesters, not just the target
+          const alreadyPlanned = state.semesters.some((s) =>
+            s.courses.some((c) => c.code === course.code)
+          )
+          if (alreadyPlanned) return state
+          return {
+            semesters: state.semesters.map((s) =>
+              s.id === semesterId ? { ...s, courses: [...s.courses, course] } : s
+            ),
+          }
+        }),
 
       removeCourseFromSemester: (semesterId, courseCode) =>
         set((state) => ({

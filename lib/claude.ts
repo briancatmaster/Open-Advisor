@@ -6,7 +6,51 @@ import type {
   PlannedSemester,
   SchoolWarning,
   RankedCourse,
+  PlannedCourse,
 } from './types'
+
+// Mirrors the SemesterPlanner violation logic for system prompt context
+function normCode(code: string): string {
+  return code.toUpperCase().trim().replace(/^([A-Z]+)(\d)/, '$1 $2')
+}
+const CONJ = new Set(['OR', 'AND', 'OF', 'THE', 'IN', 'AT', 'TO', 'A', 'AN', 'NO', 'OP'])
+function isValidCode(p: string): boolean {
+  return /^[A-Z]{2,8}\s\d{3}[A-Z]?$/.test(p) && !CONJ.has(p.split(' ')[0])
+}
+
+function buildViolationSummary(semesters: PlannedSemester[], completedCourses: CompletedCourse[]): string {
+  const violations: string[] = []
+  const completedSet = new Set(completedCourses.map((c) => normCode(c.code)))
+
+  for (let i = 0; i < semesters.length; i++) {
+    const available = new Set<string>(completedSet)
+    for (let j = 0; j < i; j++) {
+      semesters[j].courses.forEach((c) => available.add(normCode(c.code)))
+    }
+
+    for (const course of semesters[i].courses) {
+      const key = normCode(course.code)
+      const groups: string[][] = course.prereqGroups && course.prereqGroups.length > 0
+        ? course.prereqGroups
+        : course.prereqs && course.prereqs.length > 0 ? [course.prereqs] : []
+      if (groups.length === 0) continue
+
+      const unsatisfied = groups
+        .map((g) => g.map(normCode).filter((p) => isValidCode(p) && p !== key))
+        .filter((g) => g.length > 0)
+        .filter((g) => !g.some((p) => available.has(p)))
+
+      if (unsatisfied.length > 0) {
+        const desc = unsatisfied.map((g) =>
+          g.length === 1 ? g[0] : `one of ${g.slice(0, 3).join('/')}`
+        ).join(' AND ')
+        violations.push(`• ${course.code} in ${semesters[i].label}: needs ${desc} — not in any earlier semester`)
+      }
+    }
+  }
+
+  return violations.length > 0 ? violations.join('\n') : 'None detected'
+}
 
 const DIFFICULTY_LABELS: Record<string, string> = {
   light: 'light (0–15 hrs/week)',
@@ -39,8 +83,14 @@ export function buildSystemPrompt(
       : 'All requirements complete or unknown'
 
   const plannedList =
-    plannedSemesters.flatMap((s) => s.courses.map((c) => `${c.code} in ${s.label}`)).join(', ') ||
-    'No courses planned yet'
+    plannedSemesters.length > 0
+      ? plannedSemesters
+          .filter((s) => s.courses.length > 0)
+          .map((s) => `${s.label}: ${s.courses.map((c) => c.code).join(', ')}`)
+          .join(' | ')
+      : 'No courses planned yet'
+
+  const violationSummary = buildViolationSummary(plannedSemesters, completedCourses)
 
   const recommendedList = topRecommended
     .slice(0, 10)
@@ -88,6 +138,9 @@ ${warningList}
 CURRENTLY PLANNED COURSES:
 ${plannedList}
 
+PREREQ VIOLATIONS IN CURRENT PLAN:
+${violationSummary}
+
 CURRENT PRIORITY COURSE LIST:
 ${recommendedList || 'No recommendations computed yet'}
 
@@ -111,5 +164,6 @@ YOUR ADVISING GUIDELINES:
 11. If a request cannot be completed, clearly say it cannot be done and why.
 12. When recommending courses, update the Course List with explicit priority scores using tool calls.
 13. If the user asks to build a schedule/roadmap and does not provide full course-by-course details, proactively use scheduling tools to draft one; do not ask unnecessary follow-up questions.
-14. Keep responses focused and concise — default to ~80–180 words unless asked for more detail.`
+14. Keep responses focused and concise — default to ~80–180 words unless asked for more detail.
+15. When the user says "fix my schedule", "look at my schedule", "check my schedule", or similar vague review requests: immediately check the PREREQ VIOLATIONS section above. If violations exist, use move_planner_course to push each violating course to the earliest semester where its prereqs are satisfied — do NOT ask for clarification first. If no violations, say so and offer other improvements.`
 }
