@@ -1,36 +1,89 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# OpenAdvisor — UMich AI Degree Advisor
 
-## Getting Started
+AI-powered academic planning for University of Michigan students. Upload your degree audit, set your career goals, and get a personalized course pathway with a built-in AI advisor.
 
-First, run the development server:
+---
 
+## Setup
+
+**1. Install dependencies**
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**2. Add your API key**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Open `.env.local` and fill in your OpenRouter key:
+```
+OPENROUTER_API_KEY=sk-or-...
+DEFAULT_MODEL=openai/gpt-4o-mini
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+To swap models later, just change `DEFAULT_MODEL` — no code changes needed. Any model on [openrouter.ai/models](https://openrouter.ai/models) works.
 
-## Learn More
+**3. Run the dev server**
+```bash
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Open [http://localhost:3000](http://localhost:3000).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## App Flow
 
-## Deploy on Vercel
+| Step | URL | What happens |
+|------|-----|-------------|
+| 1 | `/` | Landing page |
+| 2 | `/upload` | Upload your degree audit PDF (Wolverine Access → Student Records → Degree Audit → Save as PDF) |
+| 3 | `/profile` | Enter year, major, home school/program, career goal, AP/transfer credits |
+| 4 | `/dashboard` | Course recommendations + semester planner + AI advisor |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Course Database
+
+The app now uses a single curated source:
+
+- `courses_master.db` (Atlas-style schema from data mining pipeline)
+
+Normalized API rows now also include:
+```
+source, atlas_url, prereq_hard_codes, prereq_advisory_text, top_degrees
+```
+
+---
+
+## Project Structure
+
+```
+app/
+  page.tsx              # Landing
+  upload/page.tsx       # Audit upload
+  profile/page.tsx      # Profile builder
+  dashboard/page.tsx    # Main 3-panel dashboard
+  api/
+    parse-audit/        # POST: PDF → course list
+    courses/            # GET: search + ranked recommendations
+    advise/             # POST: streaming chat (OpenRouter)
+
+lib/
+  claude.ts             # OpenRouter client + system prompt builder
+  store.ts              # Zustand global state
+  audit-parser.ts       # PDF → taken/remaining courses
+  course-ranker.ts      # Scoring algorithm
+  db.ts                 # SQLite (better-sqlite3)
+  types.ts              # Shared TypeScript interfaces
+
+courses_master.db       # Curated Atlas-style source used by app/runtime
+schema.md               # Human-readable schema reference for agent context
+```
+
+---
+
+## Build
+
+```bash
+npm run build
+npm start
+```

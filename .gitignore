@@ -26,7 +26,11 @@ yarn-debug.log*
 yarn-error.log*
 
 # local env files
+.env
+.env.*
 .env*.local
+!.env.example
+!.env*.example
 
 # vercel
 .vercel
@@ -34,3 +38,17 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# sqlite runtime artifacts
+*.db-shm
+*.db-wal
+*.sqlite-shm
+*.sqlite-wal
+
+# editors and local temp
+.vscode/
+.idea/
+*.swp
+*.swo
+.cache/
+tmp/

@@ -9,11 +9,30 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "var(--background)",
-        foreground: "var(--foreground)",
+        maize: {
+          DEFAULT: "#FFCB05",
+          50: "#FFFBE6",
+          100: "#FFF5BF",
+          200: "#FFED80",
+          500: "#FFCB05",
+          600: "#E6B500",
+        },
+        umblue: {
+          DEFAULT: "#00274C",
+          50: "#E6EEF5",
+          100: "#CCDDE9",
+          200: "#99BBDA",
+          500: "#00274C",
+          600: "#001F3D",
+          700: "#001229",
+        },
+      },
+      fontFamily: {
+        sans: ["Inter", "system-ui", "sans-serif"],
       },
     },
   },
   plugins: [],
 };
+
 export default config;
