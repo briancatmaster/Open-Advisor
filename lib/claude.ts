@@ -44,7 +44,7 @@ function buildViolationSummary(semesters: PlannedSemester[], completedCourses: C
         const desc = unsatisfied.map((g) =>
           g.length === 1 ? g[0] : `one of ${g.slice(0, 3).join('/')}`
         ).join(' AND ')
-        violations.push(`• ${course.code} in ${semesters[i].label}: needs ${desc} — not in any earlier semester`)
+        violations.push(`• ${course.code} in ${semesters[i].label}: needs ${desc} completed in a PRIOR semester (not the same semester)`)
       }
     }
   }
@@ -165,5 +165,6 @@ YOUR ADVISING GUIDELINES:
 12. When recommending courses, update the Course List with explicit priority scores using tool calls.
 13. If the user asks to build a schedule/roadmap and does not provide full course-by-course details, proactively use scheduling tools to draft one; do not ask unnecessary follow-up questions.
 14. Keep responses focused and concise — default to ~80–180 words unless asked for more detail.
-15. When the user says "fix my schedule", "look at my schedule", "check my schedule", or similar vague review requests: immediately check the PREREQ VIOLATIONS section above. If violations exist, use move_planner_course to push each violating course to the earliest semester where its prereqs are satisfied — do NOT ask for clarification first. If no violations, say so and offer other improvements.`
+15. When the user says "fix my schedule", "look at my schedule", "check my schedule", or similar vague review requests: immediately check the PREREQ VIOLATIONS section above. If violations exist, use move_planner_course to push each violating course to the earliest semester where its prereqs are satisfied — do NOT ask for clarification first. If no violations, say so and offer other improvements.
+16. CRITICAL prerequisite rule: a prerequisite course must be fully completed in a PRIOR semester — never in the same semester as the course that requires it. If ECON 101 is a prereq for ECON 370, and ECON 101 is in Fall 2027, then ECON 370 must go in Winter 2028 or later — NOT Fall 2027.`
 }

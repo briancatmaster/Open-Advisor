@@ -486,7 +486,7 @@ const TOOLS = [
     type: 'function' as const,
     function: {
       name: 'add_to_planner',
-      description: 'Actually add courses to the student\'s semester planner UI. Use this when the student explicitly asks to add, schedule, or put courses into their planner/calendar. Takes a list of course codes with the semester label they belong to.',
+      description: 'Actually add courses to the student\'s semester planner UI. Use this when the student explicitly asks to add, schedule, or put courses into their planner/calendar. Takes a list of course codes with the semester label they belong to. IMPORTANT: prerequisites must be placed in a strictly EARLIER semester — never the same semester as the course that requires them.',
       parameters: {
         type: 'object',
         properties: {
@@ -511,7 +511,7 @@ const TOOLS = [
     type: 'function' as const,
     function: {
       name: 'move_planner_course',
-      description: 'Move a course that is already in the planner from one semester to another.',
+      description: 'Move a course that is already in the planner from one semester to another. IMPORTANT: prerequisites must be in a strictly EARLIER semester — never the same semester as the course that needs them.',
       parameters: {
         type: 'object',
         properties: {

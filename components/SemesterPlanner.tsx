@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useDraggable, useDroppable, useDndMonitor } from '@dnd-kit/core'
 import { Trash2, AlertTriangle, ChevronLeft, ChevronRight, Calendar, GripVertical } from 'lucide-react'
 import { useStore } from '@/lib/store'
@@ -78,23 +78,44 @@ function DraggablePlannedCourse({
   onRemove,
   onOpenAtlas,
   missingPrereqs,
+  compact = false,
 }: {
   semId: string
   course: PlannedCourse
   onRemove: (code: string) => void
   onOpenAtlas: (course: PlannedCourse) => void
-  missingPrereqs?: string[][]  // unsatisfied AND groups, each is an OR list
+  missingPrereqs?: string[][]
+  compact?: boolean
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `planned-course::${semId}::${encodeURIComponent(course.code)}`,
-    data: {
-      source: 'planner',
-      fromSemesterId: semId,
-      course,
-    },
+    data: { source: 'planner', fromSemesterId: semId, course },
   })
 
   const hasViolation = missingPrereqs && missingPrereqs.length > 0
+
+  if (compact) {
+    return (
+      <div
+        ref={setNodeRef}
+        className={`flex items-center gap-1 border rounded px-1.5 py-0.5 transition-all ${
+          isDragging
+            ? 'opacity-40'
+            : hasViolation
+            ? 'border-red-300 bg-red-50'
+            : 'bg-umblue-50 border-umblue-100'
+        }`}
+      >
+        <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing touch-none">
+          <GripVertical className="w-2.5 h-2.5 text-gray-300" />
+        </div>
+        <span className={`text-[10px] font-semibold truncate ${hasViolation ? 'text-red-600' : 'text-umblue'}`}>
+          {course.code}
+        </span>
+        {hasViolation && <AlertTriangle className="w-2.5 h-2.5 text-red-400 shrink-0" />}
+      </div>
+    )
+  }
 
   return (
     <div
@@ -155,6 +176,7 @@ function DroppableSemesterColumn({
   onOpenAtlas,
   isOver,
   violations,
+  compact = false,
 }: {
   semId: string
   label: string
@@ -164,6 +186,7 @@ function DroppableSemesterColumn({
   onOpenAtlas: (course: PlannedCourse) => void
   isOver: boolean
   violations: Map<string, string[][]>
+  compact?: boolean
 }) {
   const totalCredits = courses.reduce((s, c) => s + c.credits, 0)
   const overload = totalCredits > CREDIT_WARN
@@ -173,8 +196,8 @@ function DroppableSemesterColumn({
 
   return (
     <div className={`flex flex-col min-h-0 rounded-2xl overflow-hidden border transition-all duration-150 ${isOver ? 'border-maize ring-2 ring-maize/40 bg-maize-50/30' : 'bg-gray-50 border-gray-100'}`}>
-      <div className="p-3" style={{ backgroundImage: headerGradient }}>
-        <p className="text-xs font-bold text-white">{label}</p>
+      <div className={compact ? 'p-2' : 'p-3'} style={{ backgroundImage: headerGradient }}>
+        <p className="text-xs font-bold text-white truncate">{label}</p>
         <div className="flex items-center justify-between mt-0.5">
           <span className={`text-xs font-semibold ${danger ? 'text-red-100' : overload ? 'text-amber-100' : 'text-white/80'}`}>
             {totalCredits} cr
@@ -187,10 +210,10 @@ function DroppableSemesterColumn({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto scrollbar-thin p-2 space-y-1.5 min-h-[80px]">
+      <div className={`flex-1 overflow-y-auto scrollbar-thin ${compact ? 'p-1.5 space-y-1' : 'p-2 space-y-1.5'} min-h-[40px]`}>
         {courses.length === 0 ? (
-          <div className={`h-full flex items-center justify-center text-xs text-center py-4 transition-colors ${isOver ? 'text-maize font-medium' : 'text-gray-400'}`}>
-            {isOver ? 'Drop here' : 'Drag courses here'}
+          <div className={`h-full flex items-center justify-center text-center transition-colors ${compact ? 'text-[10px] py-2' : 'text-xs py-4'} ${isOver ? 'text-maize font-medium' : 'text-gray-400'}`}>
+            {isOver ? 'Drop here' : compact ? '—' : 'Drag courses here'}
           </div>
         ) : (
           courses.map((course) => (
@@ -201,6 +224,7 @@ function DroppableSemesterColumn({
               onRemove={onRemove}
               onOpenAtlas={onOpenAtlas}
               missingPrereqs={violations.get(normCode(course.code))}
+              compact={compact}
             />
           ))
         )}
@@ -235,50 +259,12 @@ export default function SemesterPlanner() {
 
   const [page, setPage] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
-  const [scrollZone, setScrollZone] = useState<'prev' | 'next' | null>(null)
-  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const pageRef = useRef(page)
-  pageRef.current = page
 
   useDndMonitor({
     onDragStart: () => setIsDragging(true),
-    onDragEnd: () => { setIsDragging(false); setScrollZone(null); clearScrollTimer() },
-    onDragCancel: () => { setIsDragging(false); setScrollZone(null); clearScrollTimer() },
-    onDragMove: (event) => {
-      const rect = containerRef.current?.getBoundingClientRect()
-      if (!rect) return
-      // Get current pointer position: activator position + cumulative delta
-      const activator = event.activatorEvent as PointerEvent
-      const x = activator.clientX + event.delta.x
-      const edgeWidth = 56  // px zone on each side
-      const inLeft = x < rect.left + edgeWidth
-      const inRight = x > rect.right - edgeWidth
-      const zone = inLeft ? 'prev' : inRight ? 'next' : null
-      setScrollZone(zone)
-    },
+    onDragEnd: () => setIsDragging(false),
+    onDragCancel: () => setIsDragging(false),
   })
-
-  // Trigger page advance when pointer stays in a zone
-  useState(() => {}) // placeholder — effect below handles it
-  const prevZone = useRef<'prev' | 'next' | null>(null)
-  if (prevZone.current !== scrollZone) {
-    prevZone.current = scrollZone
-    clearScrollTimer()
-    if (scrollZone) {
-      scrollTimerRef.current = setTimeout(() => {
-        setPage((p) => {
-          if (scrollZone === 'next') return Math.min(Math.ceil(semesters.length / 3) - 1, p + 1)
-          return Math.max(0, p - 1)
-        })
-      }, 600)
-    }
-  }
-
-  function clearScrollTimer() {
-    if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current)
-    scrollTimerRef.current = null
-  }
   const [atlasCache, setAtlasCache] = useState<Record<string, string>>({})
   const perPage = 3
   const totalPages = Math.ceil(semesters.length / perPage)
@@ -313,60 +299,50 @@ export default function SemesterPlanner() {
     }
   }
 
+  const displaySemesters = isDragging ? semesters : visible
+  const isCompact = isDragging
+
   return (
     <div className="h-full flex flex-col bg-white rounded-3xl border border-gray-100 overflow-hidden">
       <div className="px-4 pt-4 pb-3 border-b border-gray-100 flex items-center gap-2">
         <Calendar className="w-4 h-4 text-umblue" />
         <h2 className="font-bold text-umblue text-sm">Semester Planner</h2>
-        <div className="ml-auto flex items-center gap-1">
-          <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
-            className="p-1 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition-colors">
-            <ChevronLeft className="w-4 h-4 text-gray-500" />
-          </button>
-          <span className="text-xs text-gray-400 px-1">{page + 1}/{Math.max(totalPages, 1)}</span>
-          <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
-            className="p-1 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition-colors">
-            <ChevronRight className="w-4 h-4 text-gray-500" />
-          </button>
-        </div>
+        {!isDragging && (
+          <div className="ml-auto flex items-center gap-1">
+            <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
+              className="p-1 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition-colors">
+              <ChevronLeft className="w-4 h-4 text-gray-500" />
+            </button>
+            <span className="text-xs text-gray-400 px-1">{page + 1}/{Math.max(totalPages, 1)}</span>
+            <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
+              className="p-1 rounded-lg hover:bg-gray-100 disabled:opacity-30 transition-colors">
+              <ChevronRight className="w-4 h-4 text-gray-500" />
+            </button>
+          </div>
+        )}
+        {isDragging && (
+          <span className="ml-auto text-[10px] text-umblue/60 font-medium">drop on any semester</span>
+        )}
       </div>
 
-      <div ref={containerRef} className="flex-1 overflow-hidden relative">
-        {/* Drag-to-scroll edge zones — visual indicators, actual trigger is via onDragMove */}
-        {isDragging && page > 0 && (
-          <div
-            className={`absolute left-0 top-0 bottom-0 w-14 z-20 pointer-events-none flex items-center justify-center transition-opacity ${scrollZone === 'prev' ? 'opacity-100' : 'opacity-40'}`}
-            style={{ background: 'linear-gradient(to right, rgba(0,111,186,0.3), transparent)' }}
-          >
-            <ChevronLeft className="w-6 h-6 text-umblue drop-shadow" />
-          </div>
-        )}
-        {isDragging && page < totalPages - 1 && (
-          <div
-            className={`absolute right-0 top-0 bottom-0 w-14 z-20 pointer-events-none flex items-center justify-center transition-opacity ${scrollZone === 'next' ? 'opacity-100' : 'opacity-40'}`}
-            style={{ background: 'linear-gradient(to left, rgba(0,111,186,0.3), transparent)' }}
-          >
-            <ChevronRight className="w-6 h-6 text-umblue drop-shadow" />
-          </div>
-        )}
-        <div className="h-full grid grid-cols-3 gap-3 p-3">
-          {visible.map((sem) => (
-            <DroppableWrapper key={sem.id} semId={sem.id}>
-              {(isOver) => (
-                <DroppableSemesterColumn
-                  semId={sem.id}
-                  label={sem.label}
-                  season={sem.season}
-                  courses={sem.courses}
-                  onRemove={(code) => removeCourseFromSemester(sem.id, code)}
-                  onOpenAtlas={openAtlas}
-                  isOver={isOver}
-                  violations={violations}
-                />
-              )}
-            </DroppableWrapper>
-          ))}
-        </div>
+      <div className={`flex-1 overflow-y-auto grid gap-2 p-2 transition-all duration-200 ${isCompact ? 'grid-cols-4' : 'grid-cols-3 gap-3 p-3'}`}>
+        {displaySemesters.map((sem) => (
+          <DroppableWrapper key={sem.id} semId={sem.id}>
+            {(isOver) => (
+              <DroppableSemesterColumn
+                semId={sem.id}
+                label={sem.label}
+                season={sem.season}
+                courses={sem.courses}
+                onRemove={(code) => removeCourseFromSemester(sem.id, code)}
+                onOpenAtlas={openAtlas}
+                isOver={isOver}
+                violations={violations}
+                compact={isCompact}
+              />
+            )}
+          </DroppableWrapper>
+        ))}
       </div>
     </div>
   )

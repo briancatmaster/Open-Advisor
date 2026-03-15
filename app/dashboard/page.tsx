@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { GraduationCap, Settings } from 'lucide-react'
@@ -92,6 +92,42 @@ export default function DashboardPage() {
   const [topRecommended, setTopRecommended] = useState<RankedCourse[]>([])
   const [chatInterests, setChatInterests] = useState<string[]>([])
   const [activeDragCourse, setActiveDragCourse] = useState<{ code: string; name: string; credits: number; atlasUrl?: string } | null>(null)
+
+  // Panel resize state
+  const [leftWidth, setLeftWidth] = useState(360)
+  const [rightWidth, setRightWidth] = useState(320)
+  const resizing = useRef<{ side: 'left' | 'right'; startX: number; startWidth: number } | null>(null)
+
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      if (!resizing.current) return
+      const dx = e.clientX - resizing.current.startX
+      if (resizing.current.side === 'left') {
+        setLeftWidth(Math.max(260, Math.min(560, resizing.current.startWidth + dx)))
+      } else {
+        setRightWidth(Math.max(260, Math.min(560, resizing.current.startWidth - dx)))
+      }
+    }
+    function onMouseUp() {
+      if (!resizing.current) return
+      resizing.current = null
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [])
+
+  function startResize(side: 'left' | 'right', e: React.MouseEvent) {
+    e.preventDefault()
+    resizing.current = { side, startX: e.clientX, startWidth: side === 'left' ? leftWidth : rightWidth }
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
@@ -224,46 +260,37 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* 3-panel grid */}
+      {/* 3-panel flex layout with drag-to-resize handles */}
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="flex-1 overflow-hidden grid grid-cols-[360px_1fr_320px] gap-3 p-3">
-        {/* Left: Course recommendations */}
-        <CourseRecommendations
-          semesterOptions={semesterOptions}
-          onAddToSemester={handleAddToSemester}
-          chatInterests={chatInterests}
-        />
+      <div className="flex-1 overflow-hidden flex p-3 gap-0 min-h-0">
 
-        {/* Center: Semester planner (top) + timeline summary (bottom) */}
-        <div className="flex flex-col gap-3 min-h-0">
-          <div className="flex-1">
+        {/* Left: Course recommendations */}
+        <div style={{ width: leftWidth }} className="shrink-0 min-w-0 h-full">
+          <CourseRecommendations
+            semesterOptions={semesterOptions}
+            onAddToSemester={handleAddToSemester}
+            chatInterests={chatInterests}
+          />
+        </div>
+
+        {/* Left resize handle */}
+        <div
+          className="w-2 shrink-0 flex items-center justify-center cursor-col-resize group mx-1"
+          onMouseDown={(e) => startResize('left', e)}
+        >
+          <div className="w-0.5 h-10 rounded-full bg-gray-200 group-hover:bg-umblue/50 group-active:bg-umblue transition-colors" />
+        </div>
+
+        {/* Center: Semester planner + stats */}
+        <div className="flex-1 min-w-0 flex flex-col gap-3 h-full">
+          <div className="flex-1 min-h-0">
             <SemesterPlanner />
           </div>
-
-          {/* Quick stats row */}
           <div className="grid grid-cols-3 gap-3 shrink-0">
             {[
-              {
-                label: 'Completed',
-                val: completedCount,
-                sub: 'courses',
-                color: 'text-green-600',
-                bg: 'bg-green-50',
-              },
-              {
-                label: 'Planned',
-                val: semesters.reduce((s, sem) => s + sem.courses.length, 0),
-                sub: 'courses',
-                color: 'text-umblue',
-                bg: 'bg-umblue-50',
-              },
-              {
-                label: 'Remaining',
-                val: auditResult?.remainingCourses.length ?? '?',
-                sub: 'requirements',
-                color: 'text-amber-600',
-                bg: 'bg-amber-50',
-              },
+              { label: 'Completed', val: completedCount, color: 'text-green-600', bg: 'bg-green-50' },
+              { label: 'Planned', val: semesters.reduce((s, sem) => s + sem.courses.length, 0), color: 'text-umblue', bg: 'bg-umblue-50' },
+              { label: 'Remaining', val: auditResult?.remainingCourses.length ?? '?', color: 'text-amber-600', bg: 'bg-amber-50' },
             ].map((stat) => (
               <div key={stat.label} className={`${stat.bg} rounded-2xl p-3 text-center border border-gray-100`}>
                 <p className={`text-2xl font-bold ${stat.color}`}>{stat.val}</p>
@@ -273,8 +300,18 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Right resize handle */}
+        <div
+          className="w-2 shrink-0 flex items-center justify-center cursor-col-resize group mx-1"
+          onMouseDown={(e) => startResize('right', e)}
+        >
+          <div className="w-0.5 h-10 rounded-full bg-gray-200 group-hover:bg-umblue/50 group-active:bg-umblue transition-colors" />
+        </div>
+
         {/* Right: AI Advising */}
-        <AdvisingPanel topRecommended={topRecommended} onInterestsChange={setChatInterests} />
+        <div style={{ width: rightWidth }} className="shrink-0 min-w-0 h-full">
+          <AdvisingPanel topRecommended={topRecommended} onInterestsChange={setChatInterests} />
+        </div>
       </div>
 
       {/* Drag overlay — floating ghost card */}
