@@ -46,28 +46,29 @@ const GRAD_SEMESTERS = SEASONS.flatMap((s) =>
 
 export default function ProfilePage() {
   const router = useRouter()
-  const { setProfile, initSemesters, auditResult } = useStore(
+  const { setProfile, initSemesters, auditResult, profile } = useStore(
     useShallow((s) => ({
       setProfile: s.setProfile,
       initSemesters: s.initSemesters,
       auditResult: s.auditResult,
+      profile: s.profile,
     }))
   )
 
-  const [name, setName] = useState(auditResult?.studentName ?? '')
-  const [year, setYear] = useState<AcademicYear>('Freshman')
+  const [name, setName] = useState(profile?.name ?? auditResult?.studentName ?? '')
+  const [year, setYear] = useState<AcademicYear>(profile?.year ?? 'Freshman')
   const [majors, setMajors] = useState<string[]>(
-    auditResult?.major ? [auditResult.major] : []
+    profile?.majors ?? (auditResult?.major ? [auditResult.major] : [])
   )
   const [majorInput, setMajorInput] = useState('')
-  const [careerGoal, setCareerGoal] = useState('')
-  const [interests, setInterests] = useState('')
-  const [homeSchool, setHomeSchool] = useState<HomeSchool>('LSA')
-  const [intendedProgram, setIntendedProgram] = useState('')
-  const [difficulty, setDifficulty] = useState<DifficultyPreference>('balanced')
-  const [gradSemester, setGradSemester] = useState('Winter 2029')
-  const [currentSeason, setCurrentSeason] = useState<'Fall' | 'Winter'>('Winter')
-  const [currentYear, setCurrentYear] = useState(2026)
+  const [careerGoal, setCareerGoal] = useState(profile?.careerGoal ?? '')
+  const [interests, setInterests] = useState(profile?.interests ?? '')
+  const [homeSchool, setHomeSchool] = useState<HomeSchool>(profile?.homeSchool ?? 'LSA')
+  const [intendedProgram, setIntendedProgram] = useState(profile?.intendedProgram ?? '')
+  const [difficulty, setDifficulty] = useState<DifficultyPreference>(profile?.difficultyPreference ?? 'balanced')
+  const [gradSemester, setGradSemester] = useState(profile?.targetGradSemester ?? 'Winter 2029')
+  const [currentSeason, setCurrentSeason] = useState<'Fall' | 'Winter'>(profile?.currentSeason === 'Summer' ? 'Fall' : profile?.currentSeason ?? 'Winter')
+  const [currentYear, setCurrentYear] = useState(profile?.currentYear ?? 2026)
   const [pastCourseInput, setPastCourseInput] = useState('')
   const [manualCourses, setManualCourses] = useState<string[]>([])
 
@@ -113,15 +114,20 @@ export default function ProfilePage() {
     }
 
     setProfile(profile)
-    initSemesters(currentSeason, currentYear)
+    const [gradSeasonStr, gradYearStr] = gradSemester.split(' ')
+    const gradYear = parseInt(gradYearStr)
+    const startPos = currentYear * 2 + (currentSeason === 'Winter' ? 1 : 0)
+    const endPos = gradYear * 2 + (gradSeasonStr === 'Winter' ? 1 : 0)
+    const count = !isNaN(gradYear) ? Math.max(1, Math.min(12, endPos - startPos + 1)) : 8
+    initSemesters(currentSeason, currentYear, count)
     router.push('/dashboard')
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-umblue-50 via-white to-maize-50">
       <div className="max-w-2xl mx-auto px-4 py-16">
-        <Link href="/upload" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-umblue mb-8 transition-colors">
-          <ArrowLeft className="w-4 h-4" />Back
+        <Link href={profile ? '/dashboard' : '/upload'} className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-umblue mb-8 transition-colors">
+          <ArrowLeft className="w-4 h-4" />{profile ? 'Back to Dashboard' : 'Back'}
         </Link>
 
         <div className="flex items-center gap-2 mb-8">

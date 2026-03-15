@@ -50,7 +50,7 @@ interface AppState {
 
   // ── Planner ──────────────────────────────────────────────────
   semesters: PlannedSemester[]
-  initSemesters: (startSeason: 'Fall' | 'Winter', startYear: number) => void
+  initSemesters: (startSeason: 'Fall' | 'Winter', startYear: number, count?: number) => void
   addCourseToSemester: (semesterId: string, course: PlannedCourse) => void
   removeCourseFromSemester: (semesterId: string, courseCode: string) => void
   moveCourse: (courseCode: string, fromId: string, toId: string) => void
@@ -87,8 +87,8 @@ export const useStore = create<AppState>()(
 
       // ── Planner ────────────────────────────────────────────────
       semesters: [],
-      initSemesters: (startSeason, startYear) =>
-        set({ semesters: generateSemesters(startSeason, startYear, 8) }),
+      initSemesters: (startSeason, startYear, count = 8) =>
+        set({ semesters: generateSemesters(startSeason, startYear, count) }),
 
       addCourseToSemester: (semesterId, course) =>
         set((state) => {

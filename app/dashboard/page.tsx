@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { GraduationCap, Settings } from 'lucide-react'
+import { GraduationCap, Settings, Download } from 'lucide-react'
 import {
   DndContext,
   DragOverlay,
@@ -77,6 +77,23 @@ function parsePrereqGroups(raw: string): string[][] {
   return andParts
     .map((part) => extractCodesFromSegment(part))
     .filter((group) => group.length > 0)
+}
+
+function exportScheduleToCSV(semesters: { label: string; courses: { code: string; name: string; credits: number }[] }[]) {
+  const rows = [['Semester', 'Course Code', 'Course Name', 'Credits']]
+  for (const sem of semesters) {
+    for (const c of sem.courses) {
+      rows.push([sem.label, c.code, c.name, String(c.credits)])
+    }
+  }
+  const csv = rows.map((r) => r.map((v) => `"${v.replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'my-schedule.csv'
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 export default function DashboardPage() {
@@ -297,6 +314,15 @@ export default function DashboardPage() {
                 <p className="text-xs text-gray-500 mt-0.5">{stat.label}</p>
               </div>
             ))}
+          </div>
+          <div className="flex justify-end shrink-0">
+            <button
+              onClick={() => exportScheduleToCSV(semesters)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-umblue hover:bg-umblue/5 rounded-lg transition-colors border border-gray-200 hover:border-umblue/30"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export to Excel
+            </button>
           </div>
         </div>
 

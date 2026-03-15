@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, SlidersHorizontal, Sparkles, Plus } from 'lucide-react'
 import CourseCard from './CourseCard'
 import { useStore } from '@/lib/store'
@@ -71,8 +71,20 @@ export default function CourseRecommendations({ semesterOptions, onAddToSemester
   const upsertPriorityCourse = useStore((s) => s.upsertPriorityCourse)
 
   const [query, setQuery] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
   const [searchResults, setSearchResults] = useState<CourseRow[]>([])
   const [searching, setSearching] = useState(false)
+  const searchContainerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setSearchOpen(false)
+      }
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [])
   const [showFilters, setShowFilters] = useState(false)
   const [deptFilter, setDeptFilter] = useState('')
 
@@ -117,6 +129,7 @@ export default function CourseRecommendations({ semesterOptions, onAddToSemester
   function addSearchResultToList(row: CourseRow) {
     const completed = useStore.getState().getCompletedCourseCodes()
     upsertPriorityCourse(rowToPriorityCourse(row, completed, 60, 'user', 'Added from search'))
+    setSearchOpen(false)
   }
 
   return (
@@ -130,12 +143,13 @@ export default function CourseRecommendations({ semesterOptions, onAddToSemester
           </span>
         </div>
 
-        <div className="relative">
+        <div className="relative" ref={searchContainerRef}>
           <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-gray-400" />
           <input
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => { setQuery(e.target.value); setSearchOpen(true) }}
+            onFocus={() => setSearchOpen(true)}
             placeholder="Search courses and add to list…"
             className="w-full pl-8 pr-8 py-2 bg-gray-50 border border-gray-100 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-maize/40 focus:border-maize/40"
           />
@@ -163,7 +177,7 @@ export default function CourseRecommendations({ semesterOptions, onAddToSemester
           </div>
         )}
 
-        {query.trim().length >= 2 && (
+        {searchOpen && query.trim().length >= 2 && (
           <div className="mt-2 rounded-xl border border-gray-100 bg-gray-50/80 max-h-40 overflow-y-auto">
             {searching ? (
               <p className="text-xs text-gray-400 px-3 py-2">Searching courses…</p>
