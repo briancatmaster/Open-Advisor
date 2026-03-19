@@ -54,8 +54,7 @@ function computePrereqViolations(
         .filter((group) => !group.some((p) => available.has(p)))  // OR logic per group
 
       if (unsatisfied.length > 0) {
-        // Cap each OR group to 3 options for display
-        violations.set(courseKey, unsatisfied.map((g) => g.slice(0, 3)))
+        violations.set(courseKey, unsatisfied)
       }
     }
   }
@@ -72,18 +71,22 @@ const SEASON_COLORS = {
   Default: 'linear-gradient(90deg, #9ca3af 0%, #6b7280 100%)',
 }
 
+function atlasUrl(course: PlannedCourse): string {
+  if (course.atlasUrl) return course.atlasUrl
+  const compact = course.code.replace(/\s+/g, '')
+  return `https://atlas.ai.umich.edu/courses/${encodeURIComponent(compact)}/`
+}
+
 function DraggablePlannedCourse({
   semId,
   course,
   onRemove,
-  onOpenAtlas,
   missingPrereqs,
   compact = false,
 }: {
   semId: string
   course: PlannedCourse
   onRemove: (code: string) => void
-  onOpenAtlas: (course: PlannedCourse) => void
   missingPrereqs?: string[][]
   compact?: boolean
 }) {
@@ -93,6 +96,7 @@ function DraggablePlannedCourse({
   })
 
   const hasViolation = missingPrereqs && missingPrereqs.length > 0
+  const href = atlasUrl(course)
 
   if (compact) {
     return (
@@ -109,9 +113,15 @@ function DraggablePlannedCourse({
         <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing touch-none">
           <GripVertical className="w-2.5 h-2.5 text-gray-300" />
         </div>
-        <span className={`text-[10px] font-semibold truncate ${hasViolation ? 'text-red-600' : 'text-umblue'}`}>
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`text-[10px] font-semibold truncate hover:underline ${hasViolation ? 'text-red-600' : 'text-umblue'}`}
+          title="Open in Atlas"
+        >
           {course.code}
-        </span>
+        </a>
         {hasViolation && <AlertTriangle className="w-2.5 h-2.5 text-red-400 shrink-0" />}
       </div>
     )
@@ -138,14 +148,15 @@ function DraggablePlannedCourse({
           <GripVertical className="w-3 h-3" />
         </div>
         <div className="min-w-0 flex-1">
-          <button
-            type="button"
-            onClick={() => onOpenAtlas(course)}
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
             className={`text-xs font-semibold truncate block hover:underline text-left ${hasViolation ? 'text-red-600' : 'text-umblue'}`}
             title="Open in Atlas"
           >
             {course.code}
-          </button>
+          </a>
           <span className="text-xs text-gray-400 truncate block leading-tight">{course.credits}cr</span>
         </div>
         <button onClick={() => onRemove(course.code)} className="text-gray-300 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 shrink-0">
@@ -173,7 +184,6 @@ function DroppableSemesterColumn({
   season,
   courses,
   onRemove,
-  onOpenAtlas,
   isOver,
   violations,
   compact = false,
@@ -183,7 +193,6 @@ function DroppableSemesterColumn({
   season: 'Fall' | 'Winter' | 'Summer'
   courses: PlannedCourse[]
   onRemove: (code: string) => void
-  onOpenAtlas: (course: PlannedCourse) => void
   isOver: boolean
   violations: Map<string, string[][]>
   compact?: boolean
@@ -222,7 +231,6 @@ function DroppableSemesterColumn({
               semId={semId}
               course={course}
               onRemove={onRemove}
-              onOpenAtlas={onOpenAtlas}
               missingPrereqs={violations.get(normCode(course.code))}
               compact={compact}
             />
@@ -265,39 +273,9 @@ export default function SemesterPlanner() {
     onDragEnd: () => setIsDragging(false),
     onDragCancel: () => setIsDragging(false),
   })
-  const [atlasCache, setAtlasCache] = useState<Record<string, string>>({})
   const perPage = 3
   const totalPages = Math.ceil(semesters.length / perPage)
   const visible = semesters.slice(page * perPage, page * perPage + perPage)
-
-  function fallbackAtlasUrl(code: string): string {
-    const compact = code.replace(/\s+/g, '')
-    return `https://atlas.ai.umich.edu/courses/${encodeURIComponent(compact)}/`
-  }
-
-  async function openAtlas(course: PlannedCourse) {
-    const win = window.open('about:blank', '_blank', 'noopener,noreferrer')
-    if (!win) return
-
-    const cached = atlasCache[course.code]
-    const initialUrl = course.atlasUrl || cached
-    if (initialUrl) {
-      win.location.href = initialUrl
-      return
-    }
-
-    try {
-      const res = await fetch(`/api/courses?q=${encodeURIComponent(course.code)}&limit=8`)
-      const data = await res.json()
-      const rows = (data.courses ?? []) as Array<{ code: string; atlas_url?: string }>
-      const exact = rows.find((row) => row.code.toUpperCase() === course.code.toUpperCase())
-      const atlasUrl = exact?.atlas_url || fallbackAtlasUrl(course.code)
-      setAtlasCache((prev) => ({ ...prev, [course.code]: atlasUrl }))
-      win.location.href = atlasUrl
-    } catch {
-      win.location.href = fallbackAtlasUrl(course.code)
-    }
-  }
 
   const displaySemesters = isDragging ? semesters : visible
   const isCompact = isDragging
@@ -335,7 +313,6 @@ export default function SemesterPlanner() {
                 season={sem.season}
                 courses={sem.courses}
                 onRemove={(code) => removeCourseFromSemester(sem.id, code)}
-                onOpenAtlas={openAtlas}
                 isOver={isOver}
                 violations={violations}
                 compact={isCompact}

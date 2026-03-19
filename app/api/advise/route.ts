@@ -271,7 +271,7 @@ function buildScheduleFromPriorityList(
   context: ToolContext,
   args: Record<string, unknown>
 ): {
-  addToPlanner: { semesterId: string; courseCode: string; courseName: string; credits: number; atlasUrl: string; prereqs: string[] }[]
+  addToPlanner: { semesterId: string; courseCode: string; courseName: string; credits: number; atlasUrl: string; prereqs: string[]; rawPrerequisites: string }[]
   message: string
 } {
   const sems = context.semesters
@@ -329,7 +329,7 @@ function buildScheduleFromPriorityList(
       return parseNumericCourseLevel(a.code) - parseNumericCourseLevel(b.code)
     })
 
-  const added: { semesterId: string; courseCode: string; courseName: string; credits: number; atlasUrl: string; prereqs: string[] }[] = []
+  const added: { semesterId: string; courseCode: string; courseName: string; credits: number; atlasUrl: string; prereqs: string[]; rawPrerequisites: string }[] = []
   const addedBySemIndex = new Map<number, string[]>()
   const unmetCounts = new Map<string, number>()
 
@@ -372,6 +372,7 @@ function buildScheduleFromPriorityList(
         credits: row.credits,
         atlasUrl: row.atlas_url || '',
         prereqs: splitCsv(row.prereq_hard_codes || row.prereqs),
+        rawPrerequisites: row.raw_prerequisites || '',
       })
       usedGlobal.add(item.code)
       const semAdds = addedBySemIndex.get(semIdx) ?? []
@@ -752,7 +753,7 @@ function runTool(name: string, args: Record<string, unknown>, context: ToolConte
   if (name === 'add_to_planner') {
     const entries = args.entries as { semesterLabel: string; courseCode: string }[]
     const semMap = new Map(context.semesters.map((s) => [s.label.toLowerCase(), s.id]))
-    const resolved: { semesterId: string; courseCode: string; courseName: string; credits: number; atlasUrl: string; prereqs: string[] }[] = []
+    const resolved: { semesterId: string; courseCode: string; courseName: string; credits: number; atlasUrl: string; prereqs: string[]; rawPrerequisites: string }[] = []
     const missing: string[] = []
 
     for (const e of entries) {
@@ -767,6 +768,7 @@ function runTool(name: string, args: Record<string, unknown>, context: ToolConte
         credits: row.credits,
         atlasUrl: row.atlas_url || '',
         prereqs: splitCsv(row.prereq_hard_codes || row.prereqs),
+        rawPrerequisites: row.raw_prerequisites || '',
       })
     }
 

@@ -112,11 +112,26 @@ function workloadToDifficulty(pct: number | null): number {
 }
 
 function extractCourseCodesFromText(text: string): string[] {
-  const codes = new Set<string>()
-  for (const match of Array.from(text.toUpperCase().matchAll(COURSE_CODE_RE))) {
-    codes.add(`${match[1]} ${match[2]}`)
+  // Token-based extraction that handles inherited department prefixes.
+  // e.g. "ENGR 101 or 151 or EECS 180 or 183" → ["ENGR 101", "ENGR 151", "EECS 180", "EECS 183"]
+  const SKIP = new Set(['OR', 'AND', 'OF', 'THE', 'IN', 'AT', 'TO', 'A', 'AN', 'NO', 'OP', 'C', 'F', 'BETTER'])
+  const codes: string[] = []
+  let lastDept = ''
+  const tokens = text.toUpperCase().split(/[\s;,()/]+/).filter(Boolean)
+  for (const token of tokens) {
+    const deptNum = token.match(/^([A-Z]{2,8})(\d{3}[A-Z]?)$/)
+    const deptOnly = token.match(/^([A-Z]{2,8})$/)
+    const numOnly = token.match(/^(\d{3}[A-Z]?)$/)
+    if (deptNum) {
+      lastDept = deptNum[1]
+      codes.push(`${deptNum[1]} ${deptNum[2]}`)
+    } else if (deptOnly && !SKIP.has(token)) {
+      lastDept = token
+    } else if (numOnly && lastDept) {
+      codes.push(`${lastDept} ${numOnly[1]}`)
+    }
   }
-  return Array.from(codes)
+  return Array.from(new Set(codes))
 }
 
 function removeCourseCodesFromText(text: string): string {

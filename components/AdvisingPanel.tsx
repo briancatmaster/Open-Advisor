@@ -8,6 +8,7 @@ import { useStore } from '@/lib/store'
 import { useShallow } from 'zustand/react/shallow'
 import { buildSystemPrompt } from '@/lib/claude'
 import { getSchoolPlanningWarnings } from '@/lib/school-rules'
+import { parsePrereqGroups } from '@/lib/prereq-parser'
 import type { ChatMessage, RankedCourse } from '@/lib/types'
 
 // Minimal ranked type for prompt building
@@ -236,12 +237,14 @@ export default function AdvisingPanel({ topRecommended, onInterestsChange }: Pro
             }
             if (parsed.addToPlanner) {
               for (const entry of parsed.addToPlanner) {
+                const prereqGroups = parsePrereqGroups(entry.rawPrerequisites ?? '')
                 addCourseToSemester(entry.semesterId, {
                   code: entry.courseCode,
                   name: entry.courseName,
                   credits: entry.credits,
                   atlasUrl: entry.atlasUrl,
                   prereqs: entry.prereqs ?? [],
+                  prereqGroups,
                 })
               }
             }
