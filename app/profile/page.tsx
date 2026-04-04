@@ -39,8 +39,7 @@ const HOME_SCHOOLS: HomeSchool[] = [
   'Other',
 ]
 
-const SEASONS = ['Fall', 'Winter'] as const
-const GRAD_SEMESTERS = SEASONS.flatMap((s) =>
+const GRAD_SEMESTERS = ['Fall', 'Winter'].flatMap((s) =>
   [2025, 2026, 2027, 2028, 2029, 2030].map((y) => `${s} ${y}`)
 )
 
@@ -67,8 +66,6 @@ export default function ProfilePage() {
   const [intendedProgram, setIntendedProgram] = useState(profile?.intendedProgram ?? '')
   const [difficulty, setDifficulty] = useState<DifficultyPreference>(profile?.difficultyPreference ?? 'balanced')
   const [gradSemester, setGradSemester] = useState(profile?.targetGradSemester ?? 'Winter 2029')
-  const [currentSeason, setCurrentSeason] = useState<'Fall' | 'Winter'>(profile?.currentSeason === 'Summer' ? 'Fall' : profile?.currentSeason ?? 'Winter')
-  const [currentYear, setCurrentYear] = useState(profile?.currentYear ?? 2026)
   const [pastCourseInput, setPastCourseInput] = useState('')
   const [manualCourses, setManualCourses] = useState<string[]>([])
 
@@ -99,7 +96,46 @@ export default function ProfilePage() {
       }))
     }
 
-    const profile: UserProfile = {
+    // ── Auto-derive start semester ────────────────────────────────
+    // Priority 1: earliest IP course term from the audit (student is actively in it)
+    // Priority 2: infer from academic year + current calendar date
+    let planStartSeason: 'Fall' | 'Winter' = 'Fall'
+    let planStartYear = new Date().getFullYear()
+
+    const ipTerms = auditResult?.inProgressCourses?.map((c) => c.term) ?? []
+    if (ipTerms.length > 0) {
+      const termOrder = (t: string) => {
+        const [abbr, yr] = t.split(' ')
+        const so: Record<string, number> = { WN: 0, SS: 1, FA: 2 }
+        return parseInt(yr) * 10 + (so[abbr] ?? 0)
+      }
+      const earliestIp = [...ipTerms].sort((a, b) => termOrder(a) - termOrder(b))[0]
+      const [abbr, yr] = earliestIp.split(' ')
+      planStartSeason = abbr === 'FA' ? 'Fall' : 'Winter'
+      planStartYear = parseInt(yr)
+    } else {
+      // No audit IP — infer from academic year and today
+      const now = new Date()
+      const month = now.getMonth() + 1 // 1-12
+      const yr = now.getFullYear()
+      // Aug–Dec = Fall semester, Jan–Jul = Winter semester
+      if (month >= 8) {
+        planStartSeason = 'Fall'
+        planStartYear = yr
+      } else {
+        planStartSeason = 'Winter'
+        planStartYear = yr
+      }
+      // Push start back based on year in school so first semester is included
+      const yearsBack = { Freshman: 0, Sophomore: 1, Junior: 2, Senior: 3 }[year] ?? 0
+      planStartYear -= yearsBack
+      if (yearsBack > 0) planStartSeason = 'Fall' // always start from Fall of their first year
+    }
+
+    const currentSeason: 'Fall' | 'Winter' = planStartSeason
+    const currentYear: number = planStartYear
+
+    const profileData: UserProfile = {
       name,
       year,
       majors: majors.length > 0 ? majors : ['Undeclared'],
@@ -113,13 +149,14 @@ export default function ProfilePage() {
       currentYear,
     }
 
-    setProfile(profile)
+    setProfile(profileData)
+
     const [gradSeasonStr, gradYearStr] = gradSemester.split(' ')
     const gradYear = parseInt(gradYearStr)
-    const startPos = currentYear * 2 + (currentSeason === 'Winter' ? 1 : 0)
+    const startPos = planStartYear * 2 + (planStartSeason === 'Winter' ? 1 : 0)
     const endPos = gradYear * 2 + (gradSeasonStr === 'Winter' ? 1 : 0)
-    const count = !isNaN(gradYear) ? Math.max(1, Math.min(12, endPos - startPos + 1)) : 8
-    initSemesters(currentSeason, currentYear, count)
+    const count = !isNaN(gradYear) ? Math.max(1, Math.min(16, endPos - startPos + 1)) : 8
+    initSemesters(planStartSeason, planStartYear, count)
     router.push('/dashboard')
   }
 
@@ -233,36 +270,15 @@ export default function ProfilePage() {
                 />
               </div>
 
-              {/* Grad + Planning */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Target graduation</label>
-                  <div className="relative">
-                    <select value={gradSemester} onChange={(e) => setGradSemester(e.target.value)}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-maize appearance-none bg-white">
-                      {GRAD_SEMESTERS.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <ChevronDown className="absolute right-3 top-3 w-4 h-4 text-gray-400 pointer-events-none" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Planning for</label>
-                  <div className="flex gap-2">
-                    {SEASONS.map((s) => (
-                      <button key={s} type="button" onClick={() => setCurrentSeason(s)}
-                        className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${currentSeason === s ? 'bg-umblue text-white border-umblue' : 'bg-white text-gray-600 border-gray-200 hover:border-umblue'}`}>
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex gap-2 mt-2">
-                    {[2025, 2026].map((y) => (
-                      <button key={y} type="button" onClick={() => setCurrentYear(y)}
-                        className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-colors ${currentYear === y ? 'bg-umblue text-white border-umblue' : 'bg-white text-gray-600 border-gray-200 hover:border-umblue'}`}>
-                        {y}
-                      </button>
-                    ))}
-                  </div>
+              {/* Graduation target */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Target graduation</label>
+                <div className="relative">
+                  <select value={gradSemester} onChange={(e) => setGradSemester(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-maize appearance-none bg-white">
+                    {GRAD_SEMESTERS.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-3 w-4 h-4 text-gray-400 pointer-events-none" />
                 </div>
               </div>
             </div>

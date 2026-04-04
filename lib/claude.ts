@@ -6,8 +6,8 @@ import type {
   PlannedSemester,
   SchoolWarning,
   RankedCourse,
-  PlannedCourse,
 } from './types'
+import { expandWithEquivalencies } from './ap-equivalencies'
 
 // Mirrors the SemesterPlanner violation logic for system prompt context
 function normCode(code: string): string {
@@ -18,9 +18,11 @@ function isValidCode(p: string): boolean {
   return /^[A-Z]{2,8}\s\d{3}[A-Z]?$/.test(p) && !CONJ.has(p.split(' ')[0])
 }
 
-function buildViolationSummary(semesters: PlannedSemester[], completedCourses: CompletedCourse[]): string {
+function buildViolationSummary(semesters: PlannedSemester[], completedCourses: CompletedCourse[], inProgressCourses: InProgressCourse[] = []): string {
   const violations: string[] = []
-  const completedSet = new Set(completedCourses.map((c) => normCode(c.code)))
+  // Expand through AP equivalencies so MATH 120 also counts as MATH 115, etc.
+  const allCodes = [...completedCourses.map((c) => c.code), ...inProgressCourses.map((c) => c.code)]
+  const completedSet = expandWithEquivalencies(allCodes)
 
   for (let i = 0; i < semesters.length; i++) {
     const available = new Set<string>(completedSet)
@@ -90,7 +92,7 @@ export function buildSystemPrompt(
           .join(' | ')
       : 'No courses planned yet'
 
-  const violationSummary = buildViolationSummary(plannedSemesters, completedCourses)
+  const violationSummary = buildViolationSummary(plannedSemesters, completedCourses, inProgressCourses)
 
   const recommendedList = topRecommended
     .slice(0, 10)

@@ -205,7 +205,7 @@ export default function AdvisingPanel({ topRecommended, onInterestsChange }: Pro
               text?: string
               error?: string
               toolCall?: { name: string; args: Record<string, unknown> }
-              addToPlanner?: { semesterId: string; courseCode: string; courseName: string; credits: number; atlasUrl?: string; prereqs?: string[] }[]
+              addToPlanner?: { semesterId: string; courseCode: string; courseName: string; credits: number; atlasUrl?: string; prereqs?: string[]; rawPrerequisites?: string }[]
               moveInPlanner?: { courseCode: string; fromSemesterId: string; toSemesterId: string }
               removeFromPlanner?: { courseCode: string; semesterId: string }
               upsertCourseList?: RankedCourse[]

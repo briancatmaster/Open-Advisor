@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { GraduationCap, Settings, Download } from 'lucide-react'
+import { GraduationCap, Settings } from 'lucide-react'
 import {
   DndContext,
   DragOverlay,
@@ -239,32 +239,14 @@ export default function DashboardPage() {
           <div className="w-0.5 h-10 rounded-full bg-gray-200 group-hover:bg-umblue/50 group-active:bg-umblue transition-colors" />
         </div>
 
-        {/* Center: Semester planner + stats */}
-        <div className="flex-1 min-w-0 flex flex-col gap-3 h-full">
-          <div className="flex-1 min-h-0">
-            <SemesterPlanner />
-          </div>
-          <div className="grid grid-cols-3 gap-3 shrink-0">
-            {[
-              { label: 'Completed', val: completedCount, color: 'text-green-600', bg: 'bg-green-50' },
-              { label: 'Planned', val: semesters.reduce((s, sem) => s + sem.courses.length, 0), color: 'text-umblue', bg: 'bg-umblue-50' },
-              { label: 'Remaining', val: auditResult?.remainingCourses.length ?? '?', color: 'text-amber-600', bg: 'bg-amber-50' },
-            ].map((stat) => (
-              <div key={stat.label} className={`${stat.bg} rounded-2xl p-3 text-center border border-gray-100`}>
-                <p className={`text-2xl font-bold ${stat.color}`}>{stat.val}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{stat.label}</p>
-              </div>
-            ))}
-          </div>
-          <div className="flex justify-end shrink-0">
-            <button
-              onClick={() => exportScheduleToCSV(semesters)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-umblue hover:bg-umblue/5 rounded-lg transition-colors border border-gray-200 hover:border-umblue/30"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Export to Excel
-            </button>
-          </div>
+        {/* Center: Semester planner */}
+        <div className="flex-1 min-w-0 h-full">
+          <SemesterPlanner
+            completedCount={completedCount}
+            plannedCount={semesters.reduce((s, sem) => s + sem.courses.length, 0)}
+            remainingCount={auditResult?.remainingCourses.length ?? 0}
+            onExport={() => exportScheduleToCSV(semesters)}
+          />
         </div>
 
         {/* Right resize handle */}

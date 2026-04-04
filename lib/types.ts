@@ -42,6 +42,7 @@ export interface InProgressCourse {
   name: string
   credits: number
   term: string
+  courseType?: 'IP'
 }
 
 export interface IncompleteRequirement {
@@ -49,12 +50,15 @@ export interface IncompleteRequirement {
   details: string[]
 }
 
+export type AuditCourseType = 'EN' | 'TR' | 'TE' | 'IT' | 'OT' | 'IP'
+
 export interface CompletedCourse {
   code: string
   name: string
   credits: number
   grade: string
   term: string                    // "Fall 2023"
+  courseType?: 'EN' | 'TR' | 'TE' | 'IT' | 'OT'
 }
 
 export interface RemainingCourse {
@@ -119,6 +123,16 @@ export interface PlannedCourse {
   atlasUrl?: string
   prereqs?: string[]      // flat OR list (legacy/fallback)
   prereqGroups?: string[][] // AND-of-OR: [[EECS 203, MATH 465], [EECS 280]] — all groups must be satisfied
+}
+
+// ─── Past Semesters (read-only, from audit) ──────────────────────────────────
+export interface PastSemester {
+  id: string                      // "past-fa-2025"
+  label: string                   // "Fall 2025"
+  season: "Fall" | "Winter" | "Summer"
+  year: number
+  courses: (CompletedCourse | InProgressCourse)[]
+  isCurrent: boolean              // true if contains IP courses
 }
 
 // ─── Course Ranking ───────────────────────────────────────────────────────────
